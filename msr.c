@@ -15,6 +15,14 @@
 #include "msr_address.h"
 #include "cpuid.h"
 
+/*
+	msr.c:MSRを扱うときのライブラリ
+	written by shimada-k
+	last modify 2011.8.17
+*/
+
+
+/* 管理用構造体 */
 struct handle_controller{
 	int nr_cpus;
 	int max_records;	/* 何回計測するか */
@@ -22,10 +30,6 @@ struct handle_controller{
 	int nr_handles;	/* 現在使用しているmsr_handleの数 */
 	MHANDLE *handles;
 };
-
-/*
-	後はエラー処理を施して、ネーミングを考えて完成
- */
 
 static unsigned int counter;
 struct handle_controller mh_ctl;
@@ -379,7 +383,7 @@ void setup_UNCORE_PERFEVTSEL(unsigned int addr, union UNCORE_PERFEVTSELx *reg)
 }
 
 /***
-	PMCのためのレジスタ設定関数　ここまで
+	PERFEVTSELのための設定関数　ここまで
 ***/
 
 

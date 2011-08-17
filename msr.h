@@ -10,11 +10,11 @@ union IA32_PERFEVTSELx{
 		unsigned int E:1;
 		unsigned int PC:1;
 		unsigned int INT:1;
-		unsigned int ANY:1;	/* Facility-2だとここはreserved */
+		unsigned int ANY:1;	/* FACILITY-2だとここはreserved */
 		unsigned int EN:1;
 		unsigned int INV:1;
 		unsigned int CounterMask:8;
-		unsigned int RV2:32;
+		unsigned int RV2:32;	/* reserved */
 	} split;
 	u64 full;
 };
@@ -24,16 +24,16 @@ union UNCORE_PERFEVTSELx {
 	struct {
 		unsigned int EvtSel:8;
 		unsigned int UMASK:8;
-		unsigned int RV1:1;
+		unsigned int RV1:1;	/* reserved */
 		unsigned int OCC_CTR_RST:1;
 		unsigned int E:1;
-		unsigned int RV2:1;
+		unsigned int RV2:1;	/* reserved */
 		unsigned int PMI:1;
-		unsigned int RV3:1;
+		unsigned int RV3:1;	/* reserved */
 		unsigned int EN:1;
 		unsigned int INV:1;
 		unsigned int CounterMask:8;
-		unsigned int RV4:32;
+		unsigned int RV4:32;	/* reserved */
 	} split;
 	u64 full;
 };
@@ -71,10 +71,12 @@ bool activate_handle(MHANDLE *handle, const char *tag, enum msr_scope scope,
 int setup_PERF_GLOBAL_CTRL(void);
 int setup_UNCORE_PERF_GLOBAL_CTRL(void);
 
-/* PERFEVTSELxの設定関数 簡易版と詳細版 */
+/* PERFEVTSELxの設定関数 */
+
+/* 簡易版 */
 void setup_IA32_PERFEVTSEL_quickly(unsigned int sel, unsigned int umask, unsigned int event);
 void setup_UNCORE_PERFEVTSEL_quickly(unsigned int sel, unsigned int umask, unsigned int event);
-
+/* 詳細版 */
 void setup_IA32_PERFEVTSEL(unsigned int addr, union IA32_PERFEVTSELx *reg);
 void setup_UNCORE_PERFEVTSEL(unsigned int addr, union UNCORE_PERFEVTSELx *reg);
 
