@@ -72,7 +72,7 @@ int main(int argc, char *argv[])
 
 	printf("%d nr_ia32_pmcs registered.\n", nr_ia32_pmcs);
 
-	init_handle_controller(100, USE_NR_MSR);	/* 100回、USE_NR_MSR個のMSRを使って計測する。という指定 */
+	init_handle_controller(NULL, 100, USE_NR_MSR);	/* CSVファイルはライブラリ側でオープン、100回、USE_NR_MSR個のMSRを使って計測する。という指定 */
 
 
 	/* PERFEVENTSELの設定 */

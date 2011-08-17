@@ -120,7 +120,7 @@ bool read_msr_by_handle(MHANDLE *handle)
 
 	if(handle->active == false){	/* activateされてなかったら終了 */
 		fprintf(stderr, "this handle is not active. skiped.\n");
-		return;
+		return false;
 	}
 
 	if(handle->scope == thread || handle->scope == core){
@@ -403,13 +403,6 @@ bool activate_handle(MHANDLE *handle, const char *tag, enum msr_scope scope,
 	handle->pre_closure = pre_closure;
 
 	if(handle->scope == thread || handle->scope == core){
-		u64 val[mh_ctl.nr_cpus];
-		int i;
-
-		for(i = 0; i < mh_ctl.nr_cpus; i++){
-			val[i] = get_msr(i, (off_t)handle->addr);
-		}
-
 		handle->flat_records = calloc(mh_ctl.max_records * mh_ctl.nr_cpus, sizeof(u64));
 
 		if(handle->flat_records == NULL){
@@ -417,10 +410,6 @@ bool activate_handle(MHANDLE *handle, const char *tag, enum msr_scope scope,
 		}
 	}
 	else{
-		u64 val;
-
-		val = get_msr(0, (off_t)handle->addr);
-
 		handle->flat_records = calloc(mh_ctl.max_records, sizeof(u64));
 
 		if(handle->flat_records == NULL){
@@ -455,19 +444,23 @@ void deactivate_handle(MHANDLE *handle)
 	@max_records 何回計測するか
 	@nr_handles いくつハンドルを使うか（使用するPMCの数）
 */
-bool init_handle_controller(int max_records, int nr_handles)
+bool init_handle_controller(FILE *output, int max_records, int nr_handles)
 {
-	char path[24];
+	if(output == NULL){
+		char path[24];
+		sprintf(path, "records_%d.csv", (int)time(NULL));
 
-	sprintf(path, "records_%d.csv", (int)time(NULL));
+		if((mh_ctl.csv = fopen(path, "w")) == NULL){
+			return false;
+		}
+	}
+	else{
+		mh_ctl.csv = output;
+	}
 
 	mh_ctl.nr_cpus = sysconf(_SC_NPROCESSORS_CONF);
 	mh_ctl.handles = calloc(nr_handles, sizeof(MHANDLE));
 	mh_ctl.max_records = max_records;
-
-	if((mh_ctl.csv = fopen(path, "w")) == NULL){
-		return false;
-	}
 
 	return true;
 }

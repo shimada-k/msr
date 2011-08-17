@@ -1,6 +1,11 @@
 #include <stdbool.h>
 #include "bitops.h"
 
+/*
+	レジスタビットマップ用データ構造
+	reserved領域は必ず0であること
+*/
+
 union IA32_PERFEVTSELx{
 	struct {
 		unsigned int EvtSel:8;
@@ -37,6 +42,8 @@ union UNCORE_PERFEVTSELx {
 	} split;
 	u64 full;
 };
+
+/* レジスタビットマップ用構造体 ここまで */
 
 enum msr_scope{
 	thread,
@@ -80,9 +87,8 @@ void setup_UNCORE_PERFEVTSEL_quickly(unsigned int sel, unsigned int umask, unsig
 void setup_IA32_PERFEVTSEL(unsigned int addr, union IA32_PERFEVTSELx *reg);
 void setup_UNCORE_PERFEVTSEL(unsigned int addr, union UNCORE_PERFEVTSELx *reg);
 
-
 /* 初期化、終了関数 */
-bool init_handle_controller(int max_records, int nr_handles);
+bool init_handle_controller(FILE *output, int max_records, int nr_handles);
 void term_handle_controller(void *arg);
 
 
