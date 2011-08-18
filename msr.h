@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <stdbool.h>
 #include "bitops.h"
 
@@ -56,7 +57,7 @@ enum msr_scope{
 struct msr_handle{
 	char tag[STR_MAX_TAG];
 	enum msr_scope scope;
-	off_t addr;		/* レジスタのアドレス(get_msr()の引数になる) */
+	unsigned int addr;		/* レジスタのアドレス(get_msr()の引数になる) */
 	bool active;		/* レジスタが使用可能になったら1にする */
 	u64 *flat_records;	/* バッファ */
 

@@ -102,10 +102,15 @@ void put_msr(int cpu, off_t offset, u64 val)
 */
 MHANDLE *alloc_handle(void)
 {
-	MHANDLE *handle;
+	MHANDLE *handle = NULL;
 
-	handle = &mh_ctl.handles[mh_ctl.nr_handles];
-	mh_ctl.nr_handles++;
+	if(mh_ctl.nr_handles >= 3){
+		puts("err alloc_handle");
+	}
+	else{
+		handle = &mh_ctl.handles[mh_ctl.nr_handles];
+		mh_ctl.nr_handles++;
+	}
 
 	return handle;
 }
@@ -149,6 +154,8 @@ bool read_msr_by_handle(MHANDLE *handle)
 		u64 val;
 
 		val = get_msr(0, (off_t)handle->addr);	/* 0番のCPUで実行 */
+
+		//printf("%llu\n", val);
 
 		if(handle->pre_closure){	/* 前回のデータとの差分をとって、今回のデータをクロージャ内に置いてくる */
 			if(handle->pre_closure(handle_id, &val) == false){
@@ -254,13 +261,13 @@ void flush_records(void)
 */
 int setup_PERF_GLOBAL_CTRL(void)
 {
-	int i, nr_pmcs;
+	int i, nr_pmcs, nr_cpus = sysconf(_SC_NPROCESSORS_CONF);
 	u64 reg = 0;
 
 	/* CPUID.EAXから必要なレポートを取得 */
 	nr_pmcs = ia32_nr_pmcs();
 
-	printf("nr_pmc:%d\n", nr_pmcs);	/* debug */
+	//printf("nr_pmc:%d\n", nr_pmcs);	/* debug */
 
 	/* PMCのenableビットを立てる */
 	for(i = 0; i < nr_pmcs; i++){
@@ -268,7 +275,7 @@ int setup_PERF_GLOBAL_CTRL(void)
 	}
 
 	/* 各CPUに対して書き込み */
-	for(i = 0; i < mh_ctl.nr_cpus; i++){
+	for(i = 0; i < nr_cpus; i++){
 		put_msr(i, IA32_PERF_GLOBAL_CTRL, reg);
 		printf("%llu, ", get_msr(i, IA32_PERF_GLOBAL_CTRL));
 	}
@@ -289,9 +296,7 @@ int setup_UNCORE_PERF_GLOBAL_CTRL(void)
 		set_nbit64(&reg, i);
 	}
 
-	for(i = 0; i < mh_ctl.nr_cpus; i++){
-		put_msr(i, MSR_UNCORE_PERF_GLOBAL_CTRL, reg);
-	}
+	put_msr(0, MSR_UNCORE_PERF_GLOBAL_CTRL, reg);
 
 	return 8; 	/* 2011.8.9時点でuncoreのPMCは8つで決め打ち */
 }
@@ -309,7 +314,7 @@ int setup_UNCORE_PERF_GLOBAL_CTRL(void)
 */
 void setup_IA32_PERFEVTSEL_quickly(unsigned int sel, unsigned int umask, unsigned int event)
 {
-	int i;
+	int i, nr_cpus = sysconf(_SC_NPROCESSORS_CONF);
 
 	u64 reg = 0;
 
@@ -322,7 +327,7 @@ void setup_IA32_PERFEVTSEL_quickly(unsigned int sel, unsigned int umask, unsigne
 
 	set_nbit64(&reg, 22);	/* EN bit */
 
-	for(i = 0; i < mh_ctl.nr_cpus; i++){	/* IA32_PERFEVTSELに書き込み */
+	for(i = 0; i < nr_cpus; i++){	/* IA32_PERFEVTSELに書き込み */
 		put_msr(i, sel, reg);
 	}
 }
@@ -357,7 +362,7 @@ void setup_UNCORE_PERFEVTSEL_quickly(unsigned int sel, unsigned int umask, unsig
 */
 void setup_IA32_PERFEVTSEL(unsigned int addr, union IA32_PERFEVTSELx *reg)
 {
-	int i, ver;
+	int i, ver, nr_cpus = sysconf(_SC_NPROCESSORS_CONF);
 
 	ver = perfevtsel_version_id();
 
@@ -367,7 +372,7 @@ void setup_IA32_PERFEVTSEL(unsigned int addr, union IA32_PERFEVTSELx *reg)
 		reg->split.ANY = 0;
 	}
 
-	for(i = 0; i < mh_ctl.nr_cpus; i++){	/* IA32_PERFEVTSELに書き込み */
+	for(i = 0; i < nr_cpus; i++){	/* IA32_PERFEVTSELに書き込み */
 		put_msr(i, addr, reg->full);
 	}
 }
@@ -398,14 +403,17 @@ bool activate_handle(MHANDLE *handle, const char *tag, enum msr_scope scope,
 		unsigned int addr, bool (*pre_closure)(int handle_id, u64 *cpu_val))
 {
 	snprintf(handle->tag, sizeof(char) * STR_MAX_TAG, "%s", tag);
+
 	handle->scope = scope;
 	handle->addr = addr;
 	handle->pre_closure = pre_closure;
 
 	if(handle->scope == thread || handle->scope == core){
 		handle->flat_records = calloc(mh_ctl.max_records * mh_ctl.nr_cpus, sizeof(u64));
+		//printf("mh_ctl.max_records:%d, mh_ctl.nr_cpus:%d\n", mh_ctl.max_records, mh_ctl.nr_cpus);
 
 		if(handle->flat_records == NULL){
+			//puts("calloc err");
 			return false;
 		}
 	}
@@ -460,6 +468,11 @@ bool init_handle_controller(FILE *output, int max_records, int nr_handles)
 
 	mh_ctl.nr_cpus = sysconf(_SC_NPROCESSORS_CONF);
 	mh_ctl.handles = calloc(nr_handles, sizeof(MHANDLE));
+
+	if(mh_ctl.handles == NULL){
+		return false;
+	}
+
 	mh_ctl.max_records = max_records;
 
 	return true;
@@ -477,6 +490,10 @@ void term_handle_controller(void *arg)
 	for(i = 0; i < mh_ctl.nr_handles; i++){
 		deactivate_handle(&mh_ctl.handles[i]);
 	}
+
+	fclose(mh_ctl.csv);
+
+	free(mh_ctl.handles);
 }
 
 
