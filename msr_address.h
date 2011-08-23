@@ -3,7 +3,7 @@
 *	Nehalem register address
 *
 */
-#if 0
+#if 1
 #define	IA32_PERF_GLOBAL_CTRL			0x38F
 
 #define 	IA32_FIXED_CTR1				0x30A	/* CPU_Unhalted.Core */
@@ -52,7 +52,7 @@
 *	SandyBridge register address
 *
 */
-#if 1
+#if 0
 #define	IA32_PERF_GLOBAL_CTRL			0x38F
 
 #define 	IA32_FIXED_CTR1				0x30A	/* CPU_Unhalted.Core */

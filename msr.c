@@ -21,13 +21,15 @@
 	last modify 2011.8.17
 */
 
+/* alloc_handle()内でマジックナンバーが使われていることの修正  */
+
 
 /* 管理用構造体 */
 struct handle_controller{
 	int nr_cpus;
 	int max_records;	/* 何回計測するか */
 	FILE *csv;		/* レポートのCSVファイル */
-	int nr_handles;	/* 現在使用しているmsr_handleの数 */
+	int nr_handles;	/* 使用するmsr_handleの数 */
 	MHANDLE *handles;
 };
 
@@ -103,13 +105,14 @@ void put_msr(int cpu, off_t offset, u64 val)
 MHANDLE *alloc_handle(void)
 {
 	MHANDLE *handle = NULL;
+	static int handle_counter = 0;
 
-	if(mh_ctl.nr_handles >= 3){
+	if(mh_ctl.nr_handles <= handle_counter){
 		puts("err alloc_handle");
 	}
 	else{
-		handle = &mh_ctl.handles[mh_ctl.nr_handles];
-		mh_ctl.nr_handles++;
+		handle = &mh_ctl.handles[handle_counter];
+		handle_counter++;
 	}
 
 	return handle;
@@ -402,7 +405,8 @@ void setup_UNCORE_PERFEVTSEL(unsigned int addr, union UNCORE_PERFEVTSELx *reg)
 bool activate_handle(MHANDLE *handle, const char *tag, enum msr_scope scope,
 		unsigned int addr, bool (*pre_closure)(int handle_id, u64 *cpu_val))
 {
-	snprintf(handle->tag, sizeof(char) * STR_MAX_TAG, "%s", tag);
+	//snprintf(handle->tag, sizeof(char) * STR_MAX_TAG, "%s", tag);
+	strncpy(handle->tag, tag, STR_MAX_TAG);
 
 	handle->scope = scope;
 	handle->addr = addr;
@@ -466,8 +470,9 @@ bool init_handle_controller(FILE *output, int max_records, int nr_handles)
 		mh_ctl.csv = output;
 	}
 
+	mh_ctl.nr_handles = nr_handles;
 	mh_ctl.nr_cpus = sysconf(_SC_NPROCESSORS_CONF);
-	mh_ctl.handles = calloc(nr_handles, sizeof(MHANDLE));
+	mh_ctl.handles = (MHANDLE *)calloc(nr_handles, sizeof(MHANDLE));
 
 	if(mh_ctl.handles == NULL){
 		return false;
