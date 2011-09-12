@@ -60,7 +60,7 @@ struct MsrHandle{
 	u64 *flat_records;		/* バッファ */
 
 	struct MsrHandle *next;	/* 統合形式でCSVを出力するイベントのリスト */
-	bool (*pre_closure)(int handle_id, u64 *cpu_val);	/* バッファに格納する前に生データに対して行う処理 */
+	int (*pre_closure)(int handle_id, u64 *cpu_val);	/* バッファに格納する前に生データに対して行う処理 */
 };
 
 typedef struct MsrHandle MHANDLE;
@@ -93,7 +93,7 @@ void flushHandleRecords(void);
 
 /* ハンドル有効化関数 */
 int activateHandle(MHANDLE *handle, const char *tag, int scope,
-		unsigned int addr, bool (*pre_closure)(int handle_id, u64 *cpu_val));
+		unsigned int addr, int (*pre_closure)(int handle_id, u64 *cpu_val));
 void deactivateHandle(MHANDLE *handle);
 
 

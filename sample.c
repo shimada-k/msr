@@ -13,9 +13,9 @@ static FILE *tmp_fp[USE_NR_MSR];
 	msr_handleに格納される関数（scope==package用）
 	@handle_id mh_ctl.handles[]の添字
 	@val MSRを計測した生データ
-	return true/false
+	return 失敗:-1 成功:0
 */
-bool subRecordSingle(int handle_id, u64 *val)
+int subRecordSingle(int handle_id, u64 *val)
 {
 	int skip = 0;
 
@@ -42,10 +42,10 @@ bool subRecordSingle(int handle_id, u64 *val)
 	*val -= val_last;
 
 	if(skip){
-		return false;
+		return -1;
 	}
 	else{
-		return true;
+		return 0;
 	}
 }
 
@@ -54,9 +54,9 @@ bool subRecordSingle(int handle_id, u64 *val)
 	msr_handleに格納される関数（scope==thread or core用）
 	@handle_id mh_ctl.handles[]の添字
 	@val MSRを計測した生データ
-	return true/false
+	return 失敗:-1 成功:0
 */
-bool subRecordMulti(int handle_id, u64 *val)
+int subRecordMulti(int handle_id, u64 *val)
 {
 	int nr_cpus = sysconf(_SC_NPROCESSORS_CONF);
 	int skip = 0;
@@ -87,10 +87,10 @@ bool subRecordMulti(int handle_id, u64 *val)
 	}
 
 	if(skip){
-		return false;
+		return -1;
 	}
 	else{
-		return true;
+		return 0;
 	}
 }
 

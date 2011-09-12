@@ -133,8 +133,8 @@ static int getEventValue(MHANDLE *handle)
 			val[i] = getMsrValue(i, (off_t)handle->addr);
 		}
 
-		if(handle->pre_closure){	/* 前回のデータとの差分をとって、今回のデータをクロージャ内に置いてくる */
-			if(handle->pre_closure(handle_id, val) == false){
+		if(handle->pre_closure){	/* クロージャを実行 */
+			if(handle->pre_closure(handle_id, val) == -1){
 				return -1;
 			}
 		}
@@ -153,7 +153,7 @@ static int getEventValue(MHANDLE *handle)
 		//printf("%llu\n", val);
 
 		if(handle->pre_closure){	/* 前回のデータとの差分をとって、今回のデータをクロージャ内に置いてくる */
-			if(handle->pre_closure(handle_id, &val) == false){
+			if(handle->pre_closure(handle_id, &val) == -1){
 				return -1;
 			}
 		}
@@ -480,7 +480,7 @@ void set_UNC_PERFEVTSEL(unsigned int addr, union UNCORE_PERFEVTSELx *reg)
 	return 失敗:-1 成功:0
 */
 int activateHandle(MHANDLE *handle, const char *tag, int scope,
-		unsigned int addr, bool (*pre_closure)(int handle_id, u64 *cpu_val))
+		unsigned int addr, int (*pre_closure)(int handle_id, u64 *cpu_val))
 {
 	strncpy(handle->tag, tag, STR_MAX_TAG);
 
