@@ -15,7 +15,7 @@ static FILE *tmp_fp[USE_NR_MSR];
 	@val MSRを計測した生データ
 	return true/false
 */
-bool sub_record_single(int handle_id, u64 *val)
+bool subRecordSingle(int handle_id, u64 *val)
 {
 	int skip = 0;
 
@@ -56,7 +56,7 @@ bool sub_record_single(int handle_id, u64 *val)
 	@val MSRを計測した生データ
 	return true/false
 */
-bool sub_record_multi(int handle_id, u64 *val)
+bool subRecordMulti(int handle_id, u64 *val)
 {
 	int nr_cpus = sysconf(_SC_NPROCESSORS_CONF);
 	int skip = 0;
@@ -108,15 +108,14 @@ int main(int argc, char *argv[])
 	}
 
 	/* PerfGlobalCtrlレジスタを設定 */
-	nr_pmcs = setup_PERF_GLOBAL_CTRL();
-	nr_pmcs = setup_UNCORE_PERF_GLOBAL_CTRL();
+	nr_pmcs = set_IA32_PERF_GLOBAL_CTRL();
+	nr_pmcs = set_UNC_PERF_GLOBAL_CTRL();
 	printf("%d nr_pmcs registered.\n", nr_pmcs);
 
-	if((handles = init_handle_controller(NULL, 100, USE_NR_MSR)) == NULL){	/* CSVファイルはライブラリ側でオープン、100回、USE_NR_MSR個のMSRを使って計測する。という指定 */
+	if((handles = initHandleController(NULL, 100, USE_NR_MSR)) == NULL){	/* CSVファイルはライブラリ側でオープン、100回、USE_NR_MSR個のMSRを使って計測する。という指定 */
 		puts("error");
 		return 0;
 	}
-
 
 	/* PERFEVENTSELの設定 */
 
@@ -126,60 +125,60 @@ int main(int argc, char *argv[])
 
 	reg.split.USER = 1;
 	reg.split.EN = 1;
-	setup_IA32_PERFEVTSEL(IA32_PERFEVENTSEL0, &reg);
+	set_IA32_PERFEVTSEL(IA32_PERFEVENTSEL0, &reg);
 
 	reg.split.USER = 0;
 	reg.split.OS = 1;
-	setup_IA32_PERFEVTSEL(IA32_PERFEVENTSEL1, &reg);
+	set_IA32_PERFEVTSEL(IA32_PERFEVENTSEL1, &reg);
 
 	reg.split.USER = 1;
 	reg.split.OS = 1;
-	setup_IA32_PERFEVTSEL(IA32_PERFEVENTSEL2, &reg);
+	set_IA32_PERFEVTSEL(IA32_PERFEVENTSEL2, &reg);
 #endif
 
 #if 1
-	//setup_IA32_PERFEVTSEL_quickly(IA32_PERFEVENTSEL0, UMASK_LONGEST_CACHE_LAT_MISS, EVENT_LONGEST_CACHE_LAT);
-	//setup_IA32_PERFEVTSEL_quickly(IA32_PERFEVENTSEL1, UMASK_LONGEST_CACHE_LAT_REFERENCE, EVENT_LONGEST_CACHE_LAT);
+	//set_IA32_PERFEVTSEL_handy(IA32_PERFEVENTSEL0, UMASK_LONGEST_CACHE_LAT_MISS, EVENT_LONGEST_CACHE_LAT);
+	//set_IA32_PERFEVTSEL_handy(IA32_PERFEVENTSEL1, UMASK_LONGEST_CACHE_LAT_REFERENCE, EVENT_LONGEST_CACHE_LAT);
 
-	setup_UNCORE_PERFEVTSEL_quickly(MSR_UNCORE_PERFEVTSEL0, UNC_L3_MISS_READ_UMASK, UNC_L3_MISS_EVTNUM);
-	setup_UNCORE_PERFEVTSEL_quickly(MSR_UNCORE_PERFEVTSEL1, UNC_L3_MISS_WRITE_UMASK, UNC_L3_MISS_EVTNUM);
-	setup_UNCORE_PERFEVTSEL_quickly(MSR_UNCORE_PERFEVTSEL2, UNC_L3_MISS_ANY_UMASK, UNC_L3_MISS_EVTNUM);
-	setup_UNCORE_PERFEVTSEL_quickly(MSR_UNCORE_PERFEVTSEL3, UNC_L3_MISS_PROBE_UMASK, UNC_L3_MISS_EVTNUM);
+	set_UNC_PERFEVTSEL_handy(MSR_UNCORE_PERFEVTSEL0, UNC_L3_MISS_READ_UMASK, UNC_L3_MISS_EVTNUM);
+	set_UNC_PERFEVTSEL_handy(MSR_UNCORE_PERFEVTSEL1, UNC_L3_MISS_WRITE_UMASK, UNC_L3_MISS_EVTNUM);
+	set_UNC_PERFEVTSEL_handy(MSR_UNCORE_PERFEVTSEL2, UNC_L3_MISS_ANY_UMASK, UNC_L3_MISS_EVTNUM);
+	set_UNC_PERFEVTSEL_handy(MSR_UNCORE_PERFEVTSEL3, UNC_L3_MISS_PROBE_UMASK, UNC_L3_MISS_EVTNUM);
 
-	activate_handle(&handles[0], "UNC_L3_MISS.READ", MSR_SCOPE_PACKAGE, MSR_UNCORE_PMC0, sub_record_single);
-	activate_handle(&handles[1], "UNC_L3_MISS.WRITE", MSR_SCOPE_PACKAGE, MSR_UNCORE_PMC1, sub_record_single);
-	activate_handle(&handles[2], "UNC_L3_MISS.ANY", MSR_SCOPE_PACKAGE, MSR_UNCORE_PMC2, sub_record_single);
-	activate_handle(&handles[3], "UNC_L3_MISS.PROBE", MSR_SCOPE_PACKAGE, MSR_UNCORE_PMC3, sub_record_single);
+	activateHandle(&handles[0], "UNC_L3_MISS.READ", MSR_SCOPE_PACKAGE, MSR_UNCORE_PMC0, subRecordSingle);
+	activateHandle(&handles[1], "UNC_L3_MISS.WRITE", MSR_SCOPE_PACKAGE, MSR_UNCORE_PMC1, subRecordSingle);
+	activateHandle(&handles[2], "UNC_L3_MISS.ANY", MSR_SCOPE_PACKAGE, MSR_UNCORE_PMC2, subRecordSingle);
+	activateHandle(&handles[3], "UNC_L3_MISS.PROBE", MSR_SCOPE_PACKAGE, MSR_UNCORE_PMC3, subRecordSingle);
 #endif
 
 	for(i = 0; i < 4; i++){
-		add_unified_list(&handles[i]);
+		addUnifiedList(&handles[i]);
 	}
 
 #if 1
-	activate_handle(&handles[4], "LONGEST_LAT_CACHE.MISS USER only", MSR_SCOPE_THREAD, IA32_PMC0, sub_record_multi);
-	activate_handle(&handles[5], "LONGEST_LAT_CACHE.MISS OS only", MSR_SCOPE_THREAD, IA32_PMC1, sub_record_multi);
-	activate_handle(&handles[6], "LONGEST_LAT_CACHE.MISS both ring", MSR_SCOPE_THREAD, IA32_PMC2, sub_record_multi);
+	activateHandle(&handles[4], "LONGEST_LAT_CACHE.MISS USER only", MSR_SCOPE_THREAD, IA32_PMC0, subRecordMulti);
+	activateHandle(&handles[5], "LONGEST_LAT_CACHE.MISS OS only", MSR_SCOPE_THREAD, IA32_PMC1, subRecordMulti);
+	activateHandle(&handles[6], "LONGEST_LAT_CACHE.MISS both ring", MSR_SCOPE_THREAD, IA32_PMC2, subRecordMulti);
 #endif
 
 	while(1){
 		sleep(1);
 
-		if(read_msrs() == false){	/* MAX_RECORDS以上計測した */
+		if(getEventValues() == false){	/* MAX_RECORDS以上計測した */
 			puts("time over");
 			break;
 		}
 	}
 
-	flush_handle_records();
+	flushHandleRecords();
 
 	/* handleの無効化 */
 	for(i = 0; i < USE_NR_MSR; i++){
-		deactivate_handle(&handles[i]);
+		deactivateHandle(&handles[i]);
 	}
 
 	/* 後始末 */
-	term_handle_controller();
+	termHandleController();
 
 	for(i = 0; i < USE_NR_MSR; i++){
 		fclose(tmp_fp[i]);

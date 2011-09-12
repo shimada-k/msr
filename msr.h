@@ -52,47 +52,48 @@ union UNCORE_PERFEVTSELx {
 
 #define STR_MAX_TAG	64
 
-struct msr_handle{
+struct MsrHandle{
 	char tag[STR_MAX_TAG];
 	int scope;
 	unsigned int addr;		/* レジスタのアドレス(get_msr()の引数になる) */
 	bool active;			/* レジスタが使用可能になったらtrueになる */
 	u64 *flat_records;		/* バッファ */
 
-	struct msr_handle *next;	/* 統合形式でCSVを出力するイベントのリスト */
+	struct MsrHandle *next;	/* 統合形式でCSVを出力するイベントのリスト */
 	bool (*pre_closure)(int handle_id, u64 *cpu_val);	/* バッファに格納する前に生データに対して行う処理 */
 };
 
-typedef struct msr_handle MHANDLE;
+typedef struct MsrHandle MHANDLE;
 
 /* GLOBAL_CTRLの設定関数 */
-int setup_PERF_GLOBAL_CTRL(void);
-int setup_UNCORE_PERF_GLOBAL_CTRL(void);
+int set_IA32_PERF_GLOBAL_CTRL(void);
+int set_UNC_PERF_GLOBAL_CTRL(void);
 
 /* PERFEVTSELxの設定関数 */
 
 /* 簡易版 */
-void setup_IA32_PERFEVTSEL_quickly(unsigned int sel, unsigned int umask, unsigned int event);
-void setup_UNCORE_PERFEVTSEL_quickly(unsigned int sel, unsigned int umask, unsigned int event);
+void set_IA32_PERFEVTSEL_handy(unsigned int sel, unsigned int umask, unsigned int event);
+void set_UNC_PERFEVTSEL_handy(unsigned int sel, unsigned int umask, unsigned int event);
 /* 詳細版 */
-void setup_IA32_PERFEVTSEL(unsigned int addr, union IA32_PERFEVTSELx *reg);
-void setup_UNCORE_PERFEVTSEL(unsigned int addr, union UNCORE_PERFEVTSELx *reg);
+void set_IA32_PERFEVTSEL(unsigned int addr, union IA32_PERFEVTSELx *reg);
+void set_UNC_PERFEVTSEL(unsigned int addr, union UNCORE_PERFEVTSELx *reg);
 
 /* 初期化、終了関数 */
-MHANDLE *init_handle_controller(FILE *output, int max_records, int nr_handles);
-void term_handle_controller(void);
+MHANDLE *initHandleController(FILE *output, int max_records, int nr_handles);
+void termHandleController(void);
 
 /* 計測用関数 */
-bool read_msrs(void);
+int getEventValues(void);
 
-void add_unified_list(MHANDLE *handle);
+/* リストに追加する関数 */
+void addUnifiedList(MHANDLE *handle);
 
 /* CSV書き出し関数 */
-void flush_handle_records(void);
+void flushHandleRecords(void);
 
 /* ハンドル有効化関数 */
-bool activate_handle(MHANDLE *handle, const char *tag, int scope,
+int activateHandle(MHANDLE *handle, const char *tag, int scope,
 		unsigned int addr, bool (*pre_closure)(int handle_id, u64 *cpu_val));
-void deactivate_handle(MHANDLE *handle);
+void deactivateHandle(MHANDLE *handle);
 
 
