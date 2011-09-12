@@ -18,31 +18,47 @@
 /*
 	msr.c:MSRを扱うときのライブラリ
 	written by shimada-k
-	last modify 2011.8.17
+	last modify 2011.9.12
 */
 
-/* alloc_handle()内でマジックナンバーが使われていることの修正  */
-
+/*
+	TODO:
+	1):handle同士で引き算、足し算をできるようにする
+		msr.c内にsub_handle()とsum_handle()を定義
+	2):1つのハンドルにつき値が一つのイベントの場合、統合形式で表示できるようにする
+		いくつかのハンドルを1つのグラフにまとめて出力させる
+	3):対称性を考慮し、ソースを整理する
+		free_handle(MHANDLE *handle)を定義する
+			alloc_handle()を削除する方向で!
+		公開する関数とstaticな関数を分ける
+		
+*/
 
 /* 管理用構造体 */
 struct handle_controller{
 	int nr_cpus;
-	int max_records;	/* 何回計測するか */
-	FILE *csv;		/* レポートのCSVファイル */
-	int nr_handles;	/* 使用するmsr_handleの数 */
+	int max_records;		/* 何回計測するか */
+	FILE *csv;			/* レポートのCSVファイル */
+	int nr_handles;		/* 使用するmsr_handleの数 */
+
+	MHANDLE *ulist_top, *ulist_current;	/* 統合形式で出力するハンドルの一番最初とカレントのイベント */
 	MHANDLE *handles;
 };
 
-static unsigned int counter;
-struct handle_controller mh_ctl;
+static unsigned int counter;	/* 秒数カウンタ */
+static struct handle_controller mh_ctl;
 
+
+/***
+	ここからライブラリ内部関数
+					***/
 
 /*
 	msr.koで作られるデバイスファイルにアクセスしてMSRから値を読み込む
 	@cpu CPU番号
 	@offset レジスタのアドレス
 */
-u64 get_msr(int cpu, off_t offset)
+static u64 get_msr(int cpu, off_t offset)
 {
 	ssize_t retval;
 	int fd;
@@ -75,7 +91,7 @@ u64 get_msr(int cpu, off_t offset)
 	@offset レジスタのアドレス
 	@val 書き込む値
 */
-void put_msr(int cpu, off_t offset, u64 val)
+static void put_msr(int cpu, off_t offset, u64 val)
 {
 	ssize_t retval;
 	int fd;
@@ -100,29 +116,10 @@ void put_msr(int cpu, off_t offset, u64 val)
 }
 
 /*
-	ハンドルを確保する関数
-*/
-MHANDLE *alloc_handle(void)
-{
-	MHANDLE *handle = NULL;
-	static int handle_counter = 0;
-
-	if(mh_ctl.nr_handles <= handle_counter){
-		puts("err alloc_handle");
-	}
-	else{
-		handle = &mh_ctl.handles[handle_counter];
-		handle_counter++;
-	}
-
-	return handle;
-}
-
-/*
 	ハンドルでMSRからデータを読み、バッファに格納する関数
 	@handle 読み込みに使用するハンドル
 */
-bool read_msr_by_handle(MHANDLE *handle)
+static bool read_msr_by_handle(MHANDLE *handle)
 {
 	int handle_id = handle - mh_ctl.handles;
 
@@ -131,7 +128,7 @@ bool read_msr_by_handle(MHANDLE *handle)
 		return false;
 	}
 
-	if(handle->scope == thread || handle->scope == core){
+	if(handle->scope == MSR_SCOPE_THREAD || handle->scope == MSR_SCOPE_CORE){
 
 		int i;
 		u64 val[mh_ctl.nr_cpus];
@@ -166,35 +163,10 @@ bool read_msr_by_handle(MHANDLE *handle)
 			}
 		}
 
+		printf("%llu\n", val);
+
 		/* ハンドル内バッファに格納 */
 		handle->flat_records[counter] = val;
-	}
-
-	return true;
-}
-
-/*
-	設定してあるハンドルすべてからread_msr()を発行する関数
-*/
-bool read_msr(void)
-{
-	int i, skip = 0;
-
-	if(counter >= mh_ctl.max_records){
-		return false;
-	}
-
-	for(i = 0; i < mh_ctl.nr_handles; i++){
-		if(read_msr_by_handle(&mh_ctl.handles[i]) == false){
-			skip = 1;
-		}
-	}
-
-	if(skip){
-		;
-	}
-	else{
-		counter++;
 	}
 
 	return true;
@@ -204,13 +176,13 @@ bool read_msr(void)
 	ハンドル内バッファに溜まったデータを書き出す関数
 	@handle 書き出す対象のハンドル
 */
-void flush_records_by_handle(MHANDLE *handle)
+static void flush_records_by_handle(MHANDLE *handle)
 {
 	int i, j;
 
 	fprintf(mh_ctl.csv, "%s\n", handle->tag);
 
-	if(handle->scope == thread || handle->scope == core){
+	if(handle->scope == MSR_SCOPE_THREAD || handle->scope == MSR_SCOPE_CORE){
 		for(i = 0; i < mh_ctl.nr_cpus; i++){
 			fprintf(mh_ctl.csv, ",CPU%d", i);
 		}
@@ -221,7 +193,7 @@ void flush_records_by_handle(MHANDLE *handle)
 
 	fprintf(mh_ctl.csv, "\n");
 
-	if(handle->scope == thread || handle->scope == core){
+	if(handle->scope == MSR_SCOPE_THREAD || handle->scope == MSR_SCOPE_CORE){
 		/* 1次元配列を2次元配列にキャスト */
 		u64 (*nested_records)[mh_ctl.nr_cpus] = (u64 (*)[mh_ctl.nr_cpus])handle->flat_records;
 
@@ -247,14 +219,111 @@ void flush_records_by_handle(MHANDLE *handle)
 }
 
 /*
+	unified形式で結果を出力する関数
+*/
+static void flush_records_by_list(void)
+{
+	int i, j;
+	MHANDLE *curr = NULL;
+
+	fprintf(mh_ctl.csv, "Listed event[Unified]\n");
+
+	for(curr = mh_ctl.ulist_top; curr; curr = curr->next){
+		fprintf(mh_ctl.csv, ",%s", curr->tag);
+	}
+
+	fprintf(mh_ctl.csv, "\n");
+
+	for(i = 0; i < counter; i++){
+		fprintf(mh_ctl.csv, "%d", i);	/* 時間軸を書き込む */
+
+		for(curr = mh_ctl.ulist_top; curr; curr = curr->next){
+			fprintf(mh_ctl.csv, ",%llu", curr->flat_records[i]);
+		}
+
+		fprintf(mh_ctl.csv, "\n");
+	}
+
+	fprintf(mh_ctl.csv, "\n\n");
+}
+
+
+/***
+	ここから公開関数
+				***/
+
+/*
+	引数のハンドルをリストの末尾につなぐ関数
+	@handle つなぐハンドルのアドレス
+*/
+void add_unified_list(MHANDLE *handle)
+{
+	if(handle->scope == MSR_SCOPE_PACKAGE && handle->active == true){
+		;
+	}
+	else{
+		puts("add_unified_list err");
+		return;
+	}
+
+	/* リストをつなぐ */
+	if(mh_ctl.ulist_top == NULL){
+		mh_ctl.ulist_top = handle;		/* 1番始目の要素を記録 */
+		mh_ctl.ulist_current = handle;
+	}
+	else{
+		mh_ctl.ulist_current->next = handle;	/* 2番目以降の要素 */
+		mh_ctl.ulist_current = mh_ctl.ulist_current->next;
+	}
+}
+
+/*
+	設定してあるハンドルすべてからread_msr()を発行する関数
+*/
+bool read_msrs(void)
+{
+	int i, skip = 0;
+
+	if(counter >= mh_ctl.max_records){
+		return false;
+	}
+
+	for(i = 0; i < mh_ctl.nr_handles; i++){
+		if(read_msr_by_handle(&mh_ctl.handles[i]) == false){
+			skip = 1;
+		}
+	}
+
+	if(skip){
+		;
+	}
+	else{
+		counter++;
+	}
+
+	return true;
+}
+
+
+/*
 	flush_handle_records()のラッパ関数
 */
-void flush_records(void)
+void flush_handle_records(void)
 {
 	int i;
 
 	for(i = 0; i < mh_ctl.nr_handles; i++){
-		flush_records_by_handle(&mh_ctl.handles[i]);
+
+		if(mh_ctl.handles[i].tag == NULL){
+			;
+		}
+		else{
+			flush_records_by_handle(&mh_ctl.handles[i]);
+		}
+	}
+
+	if(mh_ctl.ulist_top){	/* リストにハンドルが登録されていれば */
+		flush_records_by_list();
 	}
 }
 
@@ -299,7 +368,7 @@ int setup_UNCORE_PERF_GLOBAL_CTRL(void)
 		set_nbit64(&reg, i);
 	}
 
-	put_msr(0, MSR_UNCORE_PERF_GLOBAL_CTRL, reg);
+	put_msr(0, MSR_UNCORE_PERF_GLOBAL_CTRL, reg);	/* 0番のCPUで実行 */
 
 	return 8; 	/* 2011.8.9時点でuncoreのPMCは8つで決め打ち */
 }
@@ -336,8 +405,8 @@ void setup_IA32_PERFEVTSEL_quickly(unsigned int sel, unsigned int umask, unsigne
 }
 
 /*
-	MSR_UNCORE_PerfEvtSelを設定する関数
-	@sel MSR_UNCORE_PerfEvtSelのアドレス
+	MSR_UNMSR_SCOPE_CORE_PerfEvtSelを設定する関数
+	@sel MSR_UNMSR_SCOPE_CORE_PerfEvtSelのアドレス
 	@umask UMASKの値
 	@event Event Numの値
 */
@@ -351,7 +420,7 @@ void setup_UNCORE_PERFEVTSEL_quickly(unsigned int sel, unsigned int umask, unsig
 
 	set_nbit64(&reg, 22);	/* EN bit */
 
-	put_msr(0, sel, reg);	/* UNCOREイベントのMSRのscopeはPackageなので0番のCPUで実行するだけ */
+	put_msr(0, sel, reg);	/* UNMSR_SCOPE_COREイベントのMSRのscopeはMSR_SCOPE_PACKAGEなので0番のCPUで実行するだけ */
 }
 
 /***
@@ -387,7 +456,7 @@ void setup_IA32_PERFEVTSEL(unsigned int addr, union IA32_PERFEVTSELx *reg)
 */
 void setup_UNCORE_PERFEVTSEL(unsigned int addr, union UNCORE_PERFEVTSELx *reg)
 {
-	put_msr(0, addr, reg->full);	/* UNCOREイベントのMSRのscopeはPackageなので0番のCPUで実行するだけ */
+	put_msr(0, addr, reg->full);	/* UNCOREイベントのMSRのscopeはPACKAGEなので0番のCPUで実行するだけ */
 }
 
 /***
@@ -402,17 +471,17 @@ void setup_UNCORE_PERFEVTSEL(unsigned int addr, union UNCORE_PERFEVTSELx *reg)
 	@addr: MSRのアドレス
 	@pre_closure: MSRから得たデータをバッファに格納する前に処理する関数のアドレス
 */
-bool activate_handle(MHANDLE *handle, const char *tag, enum msr_scope scope,
+bool activate_handle(MHANDLE *handle, const char *tag, int scope,
 		unsigned int addr, bool (*pre_closure)(int handle_id, u64 *cpu_val))
 {
-	//snprintf(handle->tag, sizeof(char) * STR_MAX_TAG, "%s", tag);
 	strncpy(handle->tag, tag, STR_MAX_TAG);
 
+	handle->next = NULL;
 	handle->scope = scope;
 	handle->addr = addr;
 	handle->pre_closure = pre_closure;
 
-	if(handle->scope == thread || handle->scope == core){
+	if(handle->scope == MSR_SCOPE_THREAD || handle->scope == MSR_SCOPE_CORE){
 		handle->flat_records = calloc(mh_ctl.max_records * mh_ctl.nr_cpus, sizeof(u64));
 		//printf("mh_ctl.max_records:%d, mh_ctl.nr_cpus:%d\n", mh_ctl.max_records, mh_ctl.nr_cpus);
 
@@ -455,42 +524,58 @@ void deactivate_handle(MHANDLE *handle)
 	mh_ctlを設定する関数
 	@max_records 何回計測するか
 	@nr_handles いくつハンドルを使うか（使用するPMCの数）
+	return 配列のアドレス
 */
-bool init_handle_controller(FILE *output, int max_records, int nr_handles)
+MHANDLE *init_handle_controller(FILE *output, int max_records, int nr_handles)
 {
 	if(output == NULL){
 		char path[24];
 		sprintf(path, "records_%d.csv", (int)time(NULL));
 
 		if((mh_ctl.csv = fopen(path, "w")) == NULL){
-			return false;
+			return NULL;
 		}
 	}
 	else{
 		mh_ctl.csv = output;
 	}
 
+	mh_ctl.ulist_top = NULL;
+	mh_ctl.ulist_current = NULL;
+
 	mh_ctl.nr_handles = nr_handles;
 	mh_ctl.nr_cpus = sysconf(_SC_NPROCESSORS_CONF);
+
 	mh_ctl.handles = (MHANDLE *)calloc(nr_handles, sizeof(MHANDLE));
 
+	//printf("nr_handles:%d, sizeof(MHANDLE):%d\n", nr_handles, sizeof(MHANDLE));
+
 	if(mh_ctl.handles == NULL){
-		return false;
+		return NULL;
 	}
 
 	mh_ctl.max_records = max_records;
 
-	return true;
+	return mh_ctl.handles;
 }
 
 /*
-	ライブラリの後始末のための関数 pthreadのcleanup関数で使用されることを想定している
+	ライブラリの後始末のための関数
 */
-void term_handle_controller(void *arg)
+void term_handle_controller(void)
+{
+	fclose(mh_ctl.csv);
+	free(mh_ctl.handles);
+}
+
+/*
+ pMSR_SCOPE_THREADのcleanup関数で使用されることを想定している
+*/
+void term_handle_controller_cleanup(void *arg)
 {
 	int i;
 
-	flush_records();	/* CSVに書き出す */
+	flush_handle_records();	/* CSVに書き出す */
 
 	for(i = 0; i < mh_ctl.nr_handles; i++){
 		deactivate_handle(&mh_ctl.handles[i]);

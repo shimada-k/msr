@@ -4,7 +4,9 @@
 
 #include "msr_address.h"
 
-static FILE *tmp_fp[4];
+#define USE_NR_MSR	7	/* いくつのMSRを使ってイベントを計測するか */
+
+static FILE *tmp_fp[USE_NR_MSR];
 
 /*
 	前回のデータとの差分を取る関数 ライブラリ側で呼び出される
@@ -92,13 +94,10 @@ bool sub_record_multi(int handle_id, u64 *val)
 	}
 }
 
-#define USE_NR_MSR	4	/* いくつのMSRを使ってイベントを計測するか */
-
 int main(int argc, char *argv[])
 {
 	int i, nr_pmcs;
-	MHANDLE *handles[USE_NR_MSR];
-	enum msr_scope scope = package;
+	MHANDLE *handles = NULL;
 
 	union IA32_PERFEVTSELx reg;
 	reg.full = 0;
@@ -109,19 +108,21 @@ int main(int argc, char *argv[])
 	}
 
 	/* PerfGlobalCtrlレジスタを設定 */
-	//nr_pmcs = setup_PERF_GLOBAL_CTRL();
+	nr_pmcs = setup_PERF_GLOBAL_CTRL();
 	nr_pmcs = setup_UNCORE_PERF_GLOBAL_CTRL();
 	printf("%d nr_pmcs registered.\n", nr_pmcs);
 
-	init_handle_controller(NULL, 1000, USE_NR_MSR);	/* CSVファイルはライブラリ側でオープン、100回、USE_NR_MSR個のMSRを使って計測する。という指定 */
-
+	if((handles = init_handle_controller(NULL, 100, USE_NR_MSR)) == NULL){	/* CSVファイルはライブラリ側でオープン、100回、USE_NR_MSR個のMSRを使って計測する。という指定 */
+		puts("error");
+		return 0;
+	}
 
 
 	/* PERFEVENTSELの設定 */
 
-#if 0
-	reg.split.EvtSel = EVENT_LONGEST_CACHE_LAT;
-	reg.split.UMASK = UMASK_LONGEST_CACHE_LAT_MISS;
+#if 1
+	reg.split.EvtSel = EVENT_L3_LAT_CACHE;
+	reg.split.UMASK = UMASK_L3_LAT_CACHE_MISS;
 
 	reg.split.USER = 1;
 	reg.split.EN = 1;
@@ -136,6 +137,7 @@ int main(int argc, char *argv[])
 	setup_IA32_PERFEVTSEL(IA32_PERFEVENTSEL2, &reg);
 #endif
 
+#if 1
 	//setup_IA32_PERFEVTSEL_quickly(IA32_PERFEVENTSEL0, UMASK_LONGEST_CACHE_LAT_MISS, EVENT_LONGEST_CACHE_LAT);
 	//setup_IA32_PERFEVTSEL_quickly(IA32_PERFEVENTSEL1, UMASK_LONGEST_CACHE_LAT_REFERENCE, EVENT_LONGEST_CACHE_LAT);
 
@@ -144,41 +146,40 @@ int main(int argc, char *argv[])
 	setup_UNCORE_PERFEVTSEL_quickly(MSR_UNCORE_PERFEVTSEL2, UNC_L3_MISS_ANY_UMASK, UNC_L3_MISS_EVTNUM);
 	setup_UNCORE_PERFEVTSEL_quickly(MSR_UNCORE_PERFEVTSEL3, UNC_L3_MISS_PROBE_UMASK, UNC_L3_MISS_EVTNUM);
 
-
-	for(i = 0; i < USE_NR_MSR; i++){
-		handles[i] = alloc_handle();
-	}
-#if 0
-	activate_handle(handles[0], "UNC_L3_MISS.READ", scope, MSR_UNCORE_PMC0, NULL);
-	activate_handle(handles[1], "UNC_L3_MISS.WRITE", scope, MSR_UNCORE_PMC1, NULL);
-	activate_handle(handles[2], "UNC_L3_MISS.ANY", scope, MSR_UNCORE_PMC2, NULL);
-	activate_handle(handles[3], "UNC_L3_MISS.PROBE", scope, MSR_UNCORE_PMC3, NULL);
+	activate_handle(&handles[0], "UNC_L3_MISS.READ", MSR_SCOPE_PACKAGE, MSR_UNCORE_PMC0, sub_record_single);
+	activate_handle(&handles[1], "UNC_L3_MISS.WRITE", MSR_SCOPE_PACKAGE, MSR_UNCORE_PMC1, sub_record_single);
+	activate_handle(&handles[2], "UNC_L3_MISS.ANY", MSR_SCOPE_PACKAGE, MSR_UNCORE_PMC2, sub_record_single);
+	activate_handle(&handles[3], "UNC_L3_MISS.PROBE", MSR_SCOPE_PACKAGE, MSR_UNCORE_PMC3, sub_record_single);
 #endif
+
+	for(i = 0; i < 4; i++){
+		add_unified_list(&handles[i]);
+	}
 
 #if 1
-	activate_handle(handles[0], "UNC_L3_MISS.READ", scope, MSR_UNCORE_PMC0, sub_record_single);
-	activate_handle(handles[1], "UNC_L3_MISS.WRITE", scope, MSR_UNCORE_PMC1, sub_record_single);
-	activate_handle(handles[2], "UNC_L3_MISS.ANY", scope, MSR_UNCORE_PMC2, sub_record_single);
-	activate_handle(handles[3], "UNC_L3_MISS.PROBE", scope, MSR_UNCORE_PMC3, sub_record_single);
-#endif
-
-#if 0
-	activate_handle(handles[0], "LONGEST_LAT_CACHE.MISS USER only", scope, IA32_PMC0, sub_record_multi);
-	activate_handle(handles[1], "LONGEST_LAT_CACHE.MISS OS only", scope, IA32_PMC1, sub_record_multi);
-	activate_handle(handles[2], "LONGEST_LAT_CACHE.MISS both ring", scope, IA32_PMC2, sub_record_multi);
+	activate_handle(&handles[4], "LONGEST_LAT_CACHE.MISS USER only", MSR_SCOPE_THREAD, IA32_PMC0, sub_record_multi);
+	activate_handle(&handles[5], "LONGEST_LAT_CACHE.MISS OS only", MSR_SCOPE_THREAD, IA32_PMC1, sub_record_multi);
+	activate_handle(&handles[6], "LONGEST_LAT_CACHE.MISS both ring", MSR_SCOPE_THREAD, IA32_PMC2, sub_record_multi);
 #endif
 
 	while(1){
 		sleep(1);
 
-		if(read_msr() == false){	/* MAX_RECORDS以上計測した */
+		if(read_msrs() == false){	/* MAX_RECORDS以上計測した */
 			puts("time over");
 			break;
 		}
 	}
 
+	flush_handle_records();
+
+	/* handleの無効化 */
+	for(i = 0; i < USE_NR_MSR; i++){
+		deactivate_handle(&handles[i]);
+	}
+
 	/* 後始末 */
-	term_handle_controller(NULL);
+	term_handle_controller();
 
 	for(i = 0; i < USE_NR_MSR; i++){
 		fclose(tmp_fp[i]);

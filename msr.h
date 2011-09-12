@@ -46,34 +46,24 @@ union UNCORE_PERFEVTSELx {
 
 /* レジスタビットマップ用構造体 ここまで */
 
-enum msr_scope{
-	thread,
-	core,
-	package
-};
+#define MSR_SCOPE_THREAD		0x00
+#define MSR_SCOPE_CORE		0x01
+#define MSR_SCOPE_PACKAGE		0x02
 
 #define STR_MAX_TAG	64
 
 struct msr_handle{
 	char tag[STR_MAX_TAG];
-	enum msr_scope scope;
+	int scope;
 	unsigned int addr;		/* レジスタのアドレス(get_msr()の引数になる) */
-	bool active;		/* レジスタが使用可能になったら1にする */
-	u64 *flat_records;	/* バッファ */
+	bool active;			/* レジスタが使用可能になったらtrueになる */
+	u64 *flat_records;		/* バッファ */
 
+	struct msr_handle *next;	/* 統合形式でCSVを出力するイベントのリスト */
 	bool (*pre_closure)(int handle_id, u64 *cpu_val);	/* バッファに格納する前に生データに対して行う処理 */
 };
 
 typedef struct msr_handle MHANDLE;
-
-MHANDLE *alloc_handle(void);
-
-/* 計測用関数 */
-bool read_msr(void);
-
-/* ハンドル有効化関数 */
-bool activate_handle(MHANDLE *handle, const char *tag, enum msr_scope scope,
-		unsigned int addr, bool (*pre_closure)(int handle_id, u64 *cpu_val));
 
 /* GLOBAL_CTRLの設定関数 */
 int setup_PERF_GLOBAL_CTRL(void);
@@ -89,7 +79,20 @@ void setup_IA32_PERFEVTSEL(unsigned int addr, union IA32_PERFEVTSELx *reg);
 void setup_UNCORE_PERFEVTSEL(unsigned int addr, union UNCORE_PERFEVTSELx *reg);
 
 /* 初期化、終了関数 */
-bool init_handle_controller(FILE *output, int max_records, int nr_handles);
-void term_handle_controller(void *arg);
+MHANDLE *init_handle_controller(FILE *output, int max_records, int nr_handles);
+void term_handle_controller(void);
+
+/* 計測用関数 */
+bool read_msrs(void);
+
+void add_unified_list(MHANDLE *handle);
+
+/* CSV書き出し関数 */
+void flush_handle_records(void);
+
+/* ハンドル有効化関数 */
+bool activate_handle(MHANDLE *handle, const char *tag, int scope,
+		unsigned int addr, bool (*pre_closure)(int handle_id, u64 *cpu_val));
+void deactivate_handle(MHANDLE *handle);
 
 
