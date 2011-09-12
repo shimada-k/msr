@@ -34,6 +34,13 @@
 		
 */
 
+/* list管理用構造体 */
+struct list_controller{
+	int length;
+	MHANDLE *ulist_top;
+	MHANDLE *ulist_current;
+};
+
 /* 管理用構造体 */
 struct handle_controller{
 	int nr_cpus;
@@ -41,7 +48,9 @@ struct handle_controller{
 	FILE *csv;			/* レポートのCSVファイル */
 	int nr_handles;		/* 使用するmsr_handleの数 */
 
-	MHANDLE *ulist_top, *ulist_current;	/* 統合形式で出力するハンドルの一番最初とカレントのイベント */
+	//MHANDLE *ulist_top, *ulist_current;	/* 統合形式で出力するハンドルの一番最初とカレントのイベント */
+
+	struct list_controller list_ctl;	/* 統合形式で出力するためのリスト管理用データ */
 	MHANDLE *handles;
 };
 
@@ -218,17 +227,26 @@ static void flush_records_by_handle(MHANDLE *handle)
 	fprintf(mh_ctl.csv, "\n\n");
 }
 
+
+
 /*
 	unified形式で結果を出力する関数
 */
 static void flush_records_by_list(void)
 {
-	int i, j;
+	int i = 0, j;
 	MHANDLE *curr = NULL;
+	u64 *unified_records[mh_ctl.list_ctl.length];
+
+	/* unified_recordsにアドレスを代入する */
+	for(curr = mh_ctl.list_ctl.ulist_top; curr; curr = curr->next){
+		unified_records[i] = curr->flat_records;
+		i++;
+	}
 
 	fprintf(mh_ctl.csv, "Listed event[Unified]\n");
 
-	for(curr = mh_ctl.ulist_top; curr; curr = curr->next){
+	for(curr = mh_ctl.list_ctl.ulist_top; curr; curr = curr->next){
 		fprintf(mh_ctl.csv, ",%s", curr->tag);
 	}
 
@@ -237,8 +255,8 @@ static void flush_records_by_list(void)
 	for(i = 0; i < counter; i++){
 		fprintf(mh_ctl.csv, "%d", i);	/* 時間軸を書き込む */
 
-		for(curr = mh_ctl.ulist_top; curr; curr = curr->next){
-			fprintf(mh_ctl.csv, ",%llu", curr->flat_records[i]);
+		for(j = 0; j < mh_ctl.list_ctl.length; j++){	/* 値を書き込む */
+			fprintf(mh_ctl.csv, ",%llu", unified_records[j][i]);
 		}
 
 		fprintf(mh_ctl.csv, "\n");
@@ -262,19 +280,20 @@ void add_unified_list(MHANDLE *handle)
 		;
 	}
 	else{
-		puts("add_unified_list err");
 		return;
 	}
 
 	/* リストをつなぐ */
-	if(mh_ctl.ulist_top == NULL){
-		mh_ctl.ulist_top = handle;		/* 1番始目の要素を記録 */
-		mh_ctl.ulist_current = handle;
+	if(mh_ctl.list_ctl.ulist_top == NULL){
+		mh_ctl.list_ctl.ulist_top = handle;		/* 1番始目の要素を記録 */
+		mh_ctl.list_ctl.ulist_current = handle;
 	}
 	else{
-		mh_ctl.ulist_current->next = handle;	/* 2番目以降の要素 */
-		mh_ctl.ulist_current = mh_ctl.ulist_current->next;
+		mh_ctl.list_ctl.ulist_current->next = handle;	/* 2番目以降の要素 */
+		mh_ctl.list_ctl.ulist_current = mh_ctl.list_ctl.ulist_current->next;
 	}
+
+	mh_ctl.list_ctl.length++;
 }
 
 /*
@@ -322,7 +341,7 @@ void flush_handle_records(void)
 		}
 	}
 
-	if(mh_ctl.ulist_top){	/* リストにハンドルが登録されていれば */
+	if(mh_ctl.list_ctl.ulist_top){	/* リストにハンドルが登録されていれば */
 		flush_records_by_list();
 	}
 }
@@ -540,9 +559,12 @@ MHANDLE *init_handle_controller(FILE *output, int max_records, int nr_handles)
 		mh_ctl.csv = output;
 	}
 
-	mh_ctl.ulist_top = NULL;
-	mh_ctl.ulist_current = NULL;
+	/* list_ctlの初期化 */
+	mh_ctl.list_ctl.ulist_top = NULL;
+	mh_ctl.list_ctl.ulist_current = NULL;
+	mh_ctl.list_ctl.length = 0;
 
+	/* メンバ変数の初期化 */
 	mh_ctl.nr_handles = nr_handles;
 	mh_ctl.nr_cpus = sysconf(_SC_NPROCESSORS_CONF);
 
