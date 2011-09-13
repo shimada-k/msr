@@ -7,7 +7,6 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <stdbool.h>
 #include <pthread.h>
 #include <signal.h>
 
@@ -16,10 +15,11 @@
 #include "cpuid.h"
 
 /*
-	msr.c:MSRを扱うときのライブラリ
+	msr.c:MSRを扱う時のフレームワーク
 	written by shimada-k
-	last modify 2011.9.12
+	last modify 2011.9.13
 */
+
 
 /* list管理用構造体 */
 struct ListController{
@@ -118,7 +118,7 @@ static int getEventValue(MHANDLE *handle)
 {
 	int handle_id = handle - handle_ctl.handles;
 
-	if(handle->active == false){	/* activateされてなかったら終了 */
+	if(handle->active == 0){	/* activateされてなかったら終了 */
 		fprintf(stderr, "this handle is not active. skiped.\n");
 		return -1;
 	}
@@ -133,8 +133,8 @@ static int getEventValue(MHANDLE *handle)
 			val[i] = getMsrValue(i, (off_t)handle->addr);
 		}
 
-		if(handle->pre_closure){	/* クロージャを実行 */
-			if(handle->pre_closure(handle_id, val) == -1){
+		if(handle->preStore){	/* クロージャを実行 */
+			if(handle->preStore(handle_id, val) == -1){
 				return -1;
 			}
 		}
@@ -150,15 +150,15 @@ static int getEventValue(MHANDLE *handle)
 
 		val = getMsrValue(0, (off_t)handle->addr);	/* 0番のCPUで実行 */
 
-		//printf("%llu\n", val);
+		//printf("%llu\n", val);	/* Debug */
 
-		if(handle->pre_closure){	/* 前回のデータとの差分をとって、今回のデータをクロージャ内に置いてくる */
-			if(handle->pre_closure(handle_id, &val) == -1){
+		if(handle->preStore){	/* 前回のデータとの差分をとって、今回のデータをクロージャ内に置いてくる */
+			if(handle->preStore(handle_id, &val) == -1){
 				return -1;
 			}
 		}
 
-		printf("%llu\n", val);
+		//printf("%llu\n", val);	/* Debug */
 
 		/* ハンドル内バッファに格納 */
 		handle->flat_records[counter] = val;
@@ -214,7 +214,6 @@ static void flushRecordsByHandle(MHANDLE *handle)
 }
 
 
-
 /*
 	unified形式で結果を出力する関数
 */
@@ -225,16 +224,13 @@ static void flushRecordsByList(void)
 	struct ListController *lctl = &handle_ctl.list_ctl;
 	u64 *unified_records[lctl->length];
 
-	/* unified_recordsにアドレスを代入する */
-	for(curr = lctl->ulist_top; curr; curr = curr->next){
-		unified_records[i] = curr->flat_records;
-		i++;
-	}
-
 	fprintf(handle_ctl.csv, "Listed event[Unified]\n");
 
+	/* unified_recordsにアドレスを代入すると同時にタグ文字列を書き込む */
 	for(curr = lctl->ulist_top; curr; curr = curr->next){
+		unified_records[i] = curr->flat_records;
 		fprintf(handle_ctl.csv, ",%s", curr->tag);
+		i++;
 	}
 
 	fprintf(handle_ctl.csv, "\n");
@@ -263,7 +259,7 @@ static void flushRecordsByList(void)
 */
 void addUnifiedList(MHANDLE *handle)
 {
-	if(handle->scope == MSR_SCOPE_PACKAGE && handle->active == true){
+	if(handle->scope == MSR_SCOPE_PACKAGE && handle->active == 1){
 		;
 	}
 	else{
@@ -476,18 +472,18 @@ void set_UNC_PERFEVTSEL(unsigned int addr, union UNCORE_PERFEVTSELx *reg)
 	@tag: ハンドルを識別する文字列
 	@scop: MSRのスコープ
 	@addr: MSRのアドレス
-	@pre_closure: MSRから得たデータをバッファに格納する前に処理する関数のアドレス
+	@preStore: MSRから得たデータをバッファに格納する前に処理する関数のアドレス
 	return 失敗:-1 成功:0
 */
 int activateHandle(MHANDLE *handle, const char *tag, int scope,
-		unsigned int addr, int (*pre_closure)(int handle_id, u64 *cpu_val))
+		unsigned int addr, int (*preStore)(int handle_id, u64 *cpu_val))
 {
 	strncpy(handle->tag, tag, STR_MAX_TAG);
 
 	handle->next = NULL;
 	handle->scope = scope;
 	handle->addr = addr;
-	handle->pre_closure = pre_closure;
+	handle->preStore = preStore;
 
 	if(handle->scope == MSR_SCOPE_THREAD || handle->scope == MSR_SCOPE_CORE){
 		handle->flat_records = calloc(handle_ctl.max_records * handle_ctl.nr_cpus, sizeof(u64));
@@ -507,10 +503,10 @@ int activateHandle(MHANDLE *handle, const char *tag, int scope,
 	}
 
 	if(handle->flat_records){
-		handle->active = true;
+		handle->active = 1;
 	}
 	else{
-		handle->active = false;
+		handle->active = 0;
 	}
 
 	return 0;
@@ -523,7 +519,7 @@ int activateHandle(MHANDLE *handle, const char *tag, int scope,
 void deactivateHandle(MHANDLE *handle)
 {
 	free(handle->flat_records);
-	handle->active = false;
+	handle->active = 0;
 
 	handle_ctl.nr_handles--;
 }
@@ -593,7 +589,6 @@ void termHandleController_cleanup(void *arg)
 	}
 
 	fclose(handle_ctl.csv);
-
 	free(handle_ctl.handles);
 }
 

@@ -164,13 +164,13 @@ int main(int argc, char *argv[])
 	while(1){
 		sleep(1);
 
-		if(getEventValues() == false){	/* MAX_RECORDS以上計測した */
+		if(getEventValues() == -1){	/* MAX_RECORDS以上計測した */
 			puts("time over");
 			break;
 		}
 	}
 
-	flushHandleRecords();
+	flushHandleRecords();	/* CSVの書き出し */
 
 	/* handleの無効化 */
 	for(i = 0; i < USE_NR_MSR; i++){

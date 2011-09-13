@@ -56,11 +56,11 @@ struct MsrHandle{
 	char tag[STR_MAX_TAG];
 	int scope;
 	unsigned int addr;		/* レジスタのアドレス(get_msr()の引数になる) */
-	bool active;			/* レジスタが使用可能になったらtrueになる */
+	int active;			/* レジスタが使用可能になったら1になる */
 	u64 *flat_records;		/* バッファ */
 
 	struct MsrHandle *next;	/* 統合形式でCSVを出力するイベントのリスト */
-	int (*pre_closure)(int handle_id, u64 *cpu_val);	/* バッファに格納する前に生データに対して行う処理 */
+	int (*preStore)(int handle_id, u64 *cpu_val);	/* バッファに格納する前に生データに対して行う処理 */
 };
 
 typedef struct MsrHandle MHANDLE;
@@ -93,7 +93,7 @@ void flushHandleRecords(void);
 
 /* ハンドル有効化関数 */
 int activateHandle(MHANDLE *handle, const char *tag, int scope,
-		unsigned int addr, int (*pre_closure)(int handle_id, u64 *cpu_val));
+		unsigned int addr, int (*preSlosure)(int handle_id, u64 *cpu_val));
 void deactivateHandle(MHANDLE *handle);
 
 
