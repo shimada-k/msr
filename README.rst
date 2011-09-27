@@ -5,7 +5,7 @@ msr -C言語用モデル固有レジスタ操作用フレームワーク-
 
 MHANDLEという抽象化されたデータ構造を用いています。結果はCSVで出力されます。
 
-内部でbitopsのAPIを読んでいます。bitopsはhttps://github.com/shimada-k/bitopsにあります。
+内部でbitopsのAPIを読んでいます。'bitopsは<https://github.com/shimada-k/bitops>'にあります。
 msr.koをカーネルに組み込む必要があります。
 
 ※最近のDebianの場合、デフォルトでmodprobe msrで組み込めます。
