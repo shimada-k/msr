@@ -11,6 +11,7 @@ msr.koをカーネルに組み込む必要があります。
 ※最近のDebianの場合、デフォルトでmodprobe msrで組み込めます。
 
 ::
+
     gcc -c bitops.c
     gcc -c msr.c
     gcc -c YourProgramName.c
@@ -85,7 +86,6 @@ void addUnifiedList(MHANDLE *handle);
 void flushHandleRecords(void);
 
 /* ハンドル有効化関数 */
-int activateHandle(MHANDLE *handle, const char *tag, int scope,
-		unsigned int addr, int (*preSlosure)(int handle_id, unsigned  long long *cpu_val));
+int activateHandle(MHANDLE *handle, const char *tag, int scope, unsigned int addr, int (*preSlosure)(int handle_id, unsigned  long long *cpu_val));
 void deactivateHandle(MHANDLE *handle);
 
