@@ -22,7 +22,7 @@ union IA32_PERFEVTSELx{
 		unsigned int CounterMask:8;
 		unsigned int RV2:32;	/* reserved */
 	} split;
-	u64 full;
+	unsigned  long long full;
 };
 
 
@@ -41,7 +41,7 @@ union UNCORE_PERFEVTSELx {
 		unsigned int CounterMask:8;
 		unsigned int RV4:32;	/* reserved */
 	} split;
-	u64 full;
+	unsigned  long long full;
 };
 
 /* レジスタビットマップ用構造体 ここまで */
@@ -57,10 +57,10 @@ struct MsrHandle{
 	int scope;
 	unsigned int addr;		/* レジスタのアドレス(get_msr()の引数になる) */
 	int active;			/* レジスタが使用可能になったら1になる */
-	u64 *flat_records;		/* バッファ */
+	unsigned  long long *flat_records;		/* バッファ */
 
 	struct MsrHandle *next;	/* 統合形式でCSVを出力するイベントのリスト */
-	int (*preStore)(int handle_id, u64 *cpu_val);	/* バッファに格納する前に生データに対して行う処理 */
+	int (*preStore)(int handle_id, unsigned  long long *cpu_val);	/* バッファに格納する前に生データに対して行う処理 */
 };
 
 typedef struct MsrHandle MHANDLE;
@@ -93,7 +93,7 @@ void flushHandleRecords(void);
 
 /* ハンドル有効化関数 */
 int activateHandle(MHANDLE *handle, const char *tag, int scope,
-		unsigned int addr, int (*preSlosure)(int handle_id, u64 *cpu_val));
+		unsigned int addr, int (*preSlosure)(int handle_id, unsigned  long long *cpu_val));
 void deactivateHandle(MHANDLE *handle);
 
 

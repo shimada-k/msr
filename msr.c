@@ -52,11 +52,11 @@ static struct HandleController handle_ctl;
 	@cpu CPU番号
 	@offset レジスタのアドレス
 */
-static u64 getMsrValue(int cpu, off_t offset)
+static unsigned long long getMsrValue(int cpu, off_t offset)
 {
 	ssize_t retval;
 	int fd;
-	u64 msr;
+	unsigned long long msr;
 	char pathname[32];
 
 	sprintf(pathname, "/dev/cpu/%d/msr", cpu);
@@ -85,7 +85,7 @@ static u64 getMsrValue(int cpu, off_t offset)
 	@offset レジスタのアドレス
 	@val 書き込む値
 */
-static void putMsrValue(int cpu, off_t offset, u64 val)
+static void putMsrValue(int cpu, off_t offset, unsigned long long val)
 {
 	ssize_t retval;
 	int fd;
@@ -98,9 +98,9 @@ static void putMsrValue(int cpu, off_t offset, u64 val)
 		perror(pathname);
 	}
 
-	retval = pwrite(fd, &val, sizeof(u64), offset);
+	retval = pwrite(fd, &val, sizeof(unsigned long long), offset);
 
-	if (retval != sizeof(u64)) {
+	if (retval != sizeof(unsigned long long)) {
 		fprintf(stderr, "cpu%d pread(..., 0x%zx) = %jd\n",
 			cpu, offset, retval);
 		exit(-2);
@@ -126,8 +126,8 @@ static int getEventValue(MHANDLE *handle)
 	if(handle->scope == MSR_SCOPE_THREAD || handle->scope == MSR_SCOPE_CORE){
 
 		int i;
-		u64 val[handle_ctl.nr_cpus];
-		u64 (*nested_records)[handle_ctl.nr_cpus] = (u64 (*)[handle_ctl.nr_cpus])handle->flat_records;
+		unsigned long long val[handle_ctl.nr_cpus];
+		unsigned long long (*nested_records)[handle_ctl.nr_cpus] = (unsigned long long (*)[handle_ctl.nr_cpus])handle->flat_records;
 
 		for(i = 0; i < handle_ctl.nr_cpus; i++){
 			val[i] = getMsrValue(i, (off_t)handle->addr);
@@ -146,7 +146,7 @@ static int getEventValue(MHANDLE *handle)
 
 	}
 	else{
-		u64 val;
+		unsigned long long val;
 
 		val = getMsrValue(0, (off_t)handle->addr);	/* 0番のCPUで実行 */
 
@@ -190,7 +190,7 @@ static void flushRecordsByHandle(MHANDLE *handle)
 
 	if(handle->scope == MSR_SCOPE_THREAD || handle->scope == MSR_SCOPE_CORE){
 		/* 1次元配列を2次元配列にキャスト */
-		u64 (*nested_records)[handle_ctl.nr_cpus] = (u64 (*)[handle_ctl.nr_cpus])handle->flat_records;
+		unsigned long long (*nested_records)[handle_ctl.nr_cpus] = (unsigned long long (*)[handle_ctl.nr_cpus])handle->flat_records;
 
 		printf("%llu,%llu\n", nested_records[0][0], nested_records[0][1]);
 
@@ -222,7 +222,7 @@ static void flushRecordsByList(void)
 	int i = 0, j;
 	MHANDLE *curr = NULL;
 	struct ListController *lctl = &handle_ctl.list_ctl;
-	u64 *unified_records[lctl->length];
+	unsigned long long *unified_records[lctl->length];
 
 	fprintf(handle_ctl.csv, "Listed event[Unified]\n");
 
@@ -288,6 +288,7 @@ int getEventValues(void)
 	int i, skip = 0;
 
 	if(counter >= handle_ctl.max_records){
+		//printf("counter:%d, hadle_ctl.max_records=%d\n", counter, handle_ctl.max_records);
 		return -1;
 	}
 
@@ -337,7 +338,7 @@ void flushHandleRecords(void)
 int set_IA32_PERF_GLOBAL_CTRL(void)
 {
 	int i, nr_pmcs, nr_cpus = sysconf(_SC_NPROCESSORS_CONF);
-	u64 reg = 0;
+	unsigned long long reg = 0;
 
 	/* CPUID.EAXから必要なレポートを取得 */
 	nr_pmcs = ia32_nr_pmcs();
@@ -364,7 +365,7 @@ int set_IA32_PERF_GLOBAL_CTRL(void)
 */
 int set_UNC_PERF_GLOBAL_CTRL(void)
 {
-	u64 reg = 0;
+	unsigned long long reg = 0;
 	int i;
 
 	for(i = 0; i < 8; i++){
@@ -391,7 +392,7 @@ void set_IA32_PERFEVTSEL_handy(unsigned int sel, unsigned int umask, unsigned in
 {
 	int i, nr_cpus = sysconf(_SC_NPROCESSORS_CONF);
 
-	u64 reg = 0;
+	unsigned long long reg = 0;
 
 	reg |= umask;
 	reg = reg << 8;
@@ -415,7 +416,7 @@ void set_IA32_PERFEVTSEL_handy(unsigned int sel, unsigned int umask, unsigned in
 */
 void set_UNC_PERFEVTSEL_handy(unsigned int sel, unsigned int umask, unsigned int event)
 {
-	u64 reg = 0;
+	unsigned long long reg = 0;
 
 	reg |= umask;
 	reg = reg << 8;
@@ -476,7 +477,7 @@ void set_UNC_PERFEVTSEL(unsigned int addr, union UNCORE_PERFEVTSELx *reg)
 	return 失敗:-1 成功:0
 */
 int activateHandle(MHANDLE *handle, const char *tag, int scope,
-		unsigned int addr, int (*preStore)(int handle_id, u64 *cpu_val))
+		unsigned int addr, int (*preStore)(int handle_id, unsigned long long *cpu_val))
 {
 	strncpy(handle->tag, tag, STR_MAX_TAG);
 
@@ -486,7 +487,7 @@ int activateHandle(MHANDLE *handle, const char *tag, int scope,
 	handle->preStore = preStore;
 
 	if(handle->scope == MSR_SCOPE_THREAD || handle->scope == MSR_SCOPE_CORE){
-		handle->flat_records = calloc(handle_ctl.max_records * handle_ctl.nr_cpus, sizeof(u64));
+		handle->flat_records = calloc(handle_ctl.max_records * handle_ctl.nr_cpus, sizeof(unsigned long long));
 		//printf("handle_ctl.max_records:%d, handle_ctl.nr_cpus:%d\n", handle_ctl.max_records, handle_ctl.nr_cpus);
 
 		if(handle->flat_records == NULL){
@@ -495,7 +496,7 @@ int activateHandle(MHANDLE *handle, const char *tag, int scope,
 		}
 	}
 	else{
-		handle->flat_records = calloc(handle_ctl.max_records, sizeof(u64));
+		handle->flat_records = calloc(handle_ctl.max_records, sizeof(unsigned long long));
 
 		if(handle->flat_records == NULL){
 			return -1;
@@ -562,6 +563,8 @@ MHANDLE *initHandleController(FILE *output, int max_records, int nr_handles)
 	}
 
 	handle_ctl.max_records = max_records;
+
+	//printf("handle_ctl.max_records=%d\n", handle_ctl.max_records);
 
 	return handle_ctl.handles;
 }

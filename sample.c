@@ -15,11 +15,11 @@ static FILE *tmp_fp[USE_NR_MSR];
 	@val MSRを計測した生データ
 	return 失敗:-1 成功:0
 */
-int subRecordSingle(int handle_id, u64 *val)
+int subRecordSingle(int handle_id, unsigned long long *val)
 {
 	int skip = 0;
 
-	u64 val_last;
+	unsigned long long val_last;
 	int num;
 
 	/*-- tmp_fpはcloseすると削除されるので、openとcloseはalloc,freeで行うこととする --*/
@@ -27,14 +27,14 @@ int subRecordSingle(int handle_id, u64 *val)
 	fseek(tmp_fp[handle_id], 0, SEEK_SET);
 
 	/* 過去のvalをtmp_fpから読み込む */
-	if((num = fread(&val_last, sizeof(u64), 1, tmp_fp[handle_id])) != 1){
+	if((num = fread(&val_last, sizeof(unsigned long long), 1, tmp_fp[handle_id])) != 1){
 		skip = 1;
 	}
 
 	fseek(tmp_fp[handle_id], 0, SEEK_SET);
 
 	/* 現在のcpu_valを書き込む */
-	fwrite(val, sizeof(u64), 1, tmp_fp[handle_id]);
+	fwrite(val, sizeof(unsigned long long), 1, tmp_fp[handle_id]);
 
 	fseek(tmp_fp[handle_id], 0, SEEK_SET);
 
@@ -56,12 +56,12 @@ int subRecordSingle(int handle_id, u64 *val)
 	@val MSRを計測した生データ
 	return 失敗:-1 成功:0
 */
-int subRecordMulti(int handle_id, u64 *val)
+int subRecordMulti(int handle_id, unsigned long long *val)
 {
 	int nr_cpus = sysconf(_SC_NPROCESSORS_CONF);
 	int skip = 0;
 
-	u64 val_last[nr_cpus];
+	unsigned long long val_last[nr_cpus];
 	int i;
 	int num;
 
@@ -70,14 +70,14 @@ int subRecordMulti(int handle_id, u64 *val)
 	fseek(tmp_fp[handle_id], 0, SEEK_SET);
 
 	/* 過去のvalをtmp_fpから読み込む */
-	if((num = fread(val_last, sizeof(u64), nr_cpus, tmp_fp[handle_id])) != nr_cpus){
+	if((num = fread(val_last, sizeof(unsigned long long), nr_cpus, tmp_fp[handle_id])) != nr_cpus){
 		skip = 1;
 	}
 
 	fseek(tmp_fp[handle_id], 0, SEEK_SET);
 
 	/* 現在のcpu_valを書き込む */
-	fwrite(val, sizeof(u64), nr_cpus, tmp_fp[handle_id]);
+	fwrite(val, sizeof(unsigned long long), nr_cpus, tmp_fp[handle_id]);
 
 	fseek(tmp_fp[handle_id], 0, SEEK_SET);
 
@@ -110,6 +110,7 @@ int main(int argc, char *argv[])
 	/* PerfGlobalCtrlレジスタを設定 */
 	nr_pmcs = set_IA32_PERF_GLOBAL_CTRL();
 	nr_pmcs = set_UNC_PERF_GLOBAL_CTRL();
+
 	printf("%d nr_pmcs registered.\n", nr_pmcs);
 
 	if((handles = initHandleController(NULL, 100, USE_NR_MSR)) == NULL){	/* CSVファイルはライブラリ側でオープン、100回、USE_NR_MSR個のMSRを使って計測する。という指定 */
